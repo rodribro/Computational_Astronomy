@@ -1,19 +1,26 @@
 
 # Imports
 import numpy as np
-from scipy.integrate import odeint, solve_ivp
+from scipy.integrate import odeint, solve_ivp, cumulative_simpson, cumulative_trapezoid
+from scipy.interpolate import interp1d
+from scipy.optimize import bisect
 import matplotlib.pyplot as plt
+
+# Global vars
+G = 6.67408e-8
+R_g = 8.314511e7
 
 # Lane-Emden
 def lane_emden_sys(xi, S, n):
     y1, y2 = S
     dy1_dxi = y2
-    dy2_dxi = -2*y2/xi - np.abs(y1)**n
+    dy2_dxi = - np.abs(y1)**n - 2*y2/xi 
 
     return [dy1_dxi, dy2_dxi]
 
-def lane_emden_solver(n):
 
+
+def lane_emden_solver(n):
 
     # xi Range
     xi_0 = 1e-7 # prevent numerical singularity
@@ -37,55 +44,68 @@ def lane_emden_solver(n):
     x = x[:zero_index]
     y1 = y1[:zero_index]
     y2 = y2[:zero_index]
-    
-    dec1 = (y1[-2] - y1[-1])/(x[-2]-x[-1])
-    root = -(y1[-2] - dec1*x[-2])/dec1
-    dec2 = (y2[-1] - y2[-2])/(x[-1] - x[-2])
-    ponto_sup = y2[-2]-dec2*x[-2]+dec2*x[-1]
+
+    # Interpolação linear para encontrar o ponto onde y1 = 0
+    interp_func_y1 = interp1d(y1[-2:], x[-2:], kind='linear')
+    root = interp_func_y1(0)  # O valor de x onde y1 cruza zero
+
+    # Atualizar x e y1 com o ponto onde y1 = 0
     x[-1] = root
     y1[-1] = 0
-    y2[-1] = ponto_sup
+
+    # Para y2, fazer uma interpolação semelhante para obter o valor correspondente de y2
+    interp_func_y2 = interp1d(x[-2:], y2[-2:], kind='linear')
+    y2[-1] = interp_func_y2(root)  # Obter o valor interpolado de y2 no novo ponto x
 
     return x, y1, y2
 
 # Chemical compostion (H and He)
-def chemical_composition(xi, X_s, r_c, d_c, R, t, t_tot, Z_s):
+def chemical_composition(xi, X_s, r_c, d_c, t, t_tot):
 
     # Hidrogen
-    X_c = X_s - X_s * (t/t_tot)
-    X = X_c + (X_s - X_c)/(1+np.exp((r_c-xi)/(R*d_c)))
+    X_c = X_s - X_s * t/t_tot
+    X = X_c + (X_s - X_c)/(1+np.exp((r_c-xi)/xi[-1]/(d_c)))
+    # X = X_c + (X_s - X_c)/(1+np.exp((r_n - xi/xi[-1])/(d_c)))
     
-    # Helium
-    Y = 1 - Z_s - X
 
-    return X, Y
+    return X
 
 # Thermodynamic functions (general and center)
-
+'''
 def density(M, R, n):
     xi, y1, y2 = lane_emden_solver(n)
-    a_n = -xi[-1]/(3*y2[-1])
-    central_density = M/(4/3*np.pi*R**3) * a_n
+    central_density = -(M*xi[-1])/(4*np.pi*y2[-1]*R**3)
     density = central_density * y1**n
 
     return density, central_density
 
-def pressure(G, M, R, n):
+def pressure(M, R, n):
     xi, y1, y2 = lane_emden_solver(n)
-    c_n = 1 / (4 * np.pi * (n+1) * y2[-1]**2)
-    central_pressure = (G*M**2)/R**4 * c_n
+    central_pressure = (G*M**2)/(R**4 * 4*np.pi*(n+1)*y2[-1]**2)
     pressure = central_pressure * y1**(n+1)
 
     return pressure, central_pressure
 
-def temperature(G, M, R, X, Z, R_g, n): # R_g = gas constant, G  (define both as global variables?)
+def temperature(M, R, X, Z, n): # R_g = gas constant, G  (define both as global variables?)
     xi, y1, y2 = lane_emden_solver(n)
-    mu = 4/(5*X-Z+3)
-    b_n = 1 / (n+1) * xi[-1] * (-y2[-1])
-    central_temperature = mu*G*M/(R_g*R) * b_n
+    mu = 4/(5*X-Z+3) # needs to come from chemical composition array 
+    central_temperature = mu*G*M/(R_g*R*(n+1)*xi[-1]*y2[-1])
     temperature = central_temperature *  y1
 
     return temperature, central_temperature
+
+    GENERATING OVERFLOW PROBLEMS FOR LUMINOSITY
+'''
+def rho_P_T(n, R, M, X, Z):
+    x, y1, y2 = lane_emden_solver(n)
+    mu = 4/(5*X-Z+3)
+    rho_c = -(M*x[-1])/(4*np.pi*y2[-1]*R**3)
+    T_c = -(mu*G*M)/(R_g*R*(n+1)*x[-1]*y2[-1])
+    P_c = (G*M**2)/(R**4 * 4*np.pi*(n+1)*y2[-1]**2)
+    rho = rho_c* y1**n
+    T = T_c * y1
+    P = P_c * y1**(n+1)
+    return rho, P, T
 
 def emissivity(rho, T, X, Z):
     T6 = T/1e6
@@ -98,7 +118,6 @@ def emissivity(rho, T, X, Z):
     T6 = T6[:T_new_length]
     X = X[:T_new_length]
     rho = rho[:T_new_length]
-    e_0 = 2.38e106*X**2*rho
 
     # Formula variables
     alpha = 1.2e17*((1-X-Z)/(4*X))**2 * np.exp(-100*T6**(-1/3))
@@ -122,7 +141,41 @@ def emissivity(rho, T, X, Z):
 
     return e_total, e_pp, e_cno
 
+def luminosity(n, X_s, r_c, d_c, R, time, total_time, M, Z, L_sol ):
 
+    # xi, theta(xi), theta'(xi)
+    xi, y1, y2 = lane_emden_solver(n)
+
+    # chemical composition X, Y
+    X = chemical_composition(xi, X_s, r_c, d_c, time, total_time)
+
+    # Thermodynamic functions
+    rho, P, T = rho_P_T(n, R, M, X, Z)
+
+    # Emissivity
+    ems_tot, e_pp, e_cno = emissivity(rho, T, X, Z)
+
+    # Constant of the luminosity formula
+    const = -1/(xi[-1]**2 * y2[-1])
+
+    # Integrand of the luminosity formula
+    integrand = xi**2 * y1**n * M * ems_tot/L_sol
+
+    # Cumulative integral
+    integral = cumulative_trapezoid(integrand, x=xi, initial=0) #cumulative_simpson
+    return const * integral
+
+
+def y(n, X_s, r_c, d_c, R, time, total_time, M, Z, L_sol, L):
+    lumin = luminosity(n, X_s, r_c, d_c, R, time, total_time, M, Z, L_sol)[-1]
+    y = np.log10(lumin/(L/L_sol))
+    return y
+
+def index(f, a, b, M, L, Y, Z_X, R, L_sol, r_c, d_c, time, total_time):
+    X_s = (1-Y)/(1+Z_X)
+    Z = 1-Y-X_s 
+    index = bisect(f, a, b, args=(X_s, r_c, d_c, R, time, total_time, M, Z, L_sol, L))
+    return index
 
 
 # Lane-Emden visualizations

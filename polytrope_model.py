@@ -5,6 +5,7 @@ from scipy.integrate import odeint, solve_ivp, cumulative_simpson, cumulative_tr
 from scipy.interpolate import interp1d
 from scipy.optimize import bisect
 import matplotlib.pyplot as plt
+from scipy.stats import norm
 
 # Global vars
 G = 6.67408e-8
@@ -162,7 +163,7 @@ def luminosity(n, X_s, r_c, d_c, R, time, total_time, M, Z, L_sol ):
     integrand = xi**2 * y1**n * M * ems_tot/L_sol
 
     # Cumulative integral
-    integral = cumulative_trapezoid(integrand, x=xi, initial=0) #cumulative_simpson
+    integral = cumulative_trapezoid(integrand, x=xi, initial=0) # or cumulative_simpson
     return const * integral
 
 
@@ -176,6 +177,24 @@ def index(f, a, b, M, L, Y, Z_X, R, L_sol, r_c, d_c, time, total_time):
     Z = 1-Y-X_s 
     index = bisect(f, a, b, args=(X_s, r_c, d_c, R, time, total_time, M, Z, L_sol, L))
     return index
+
+def monte_carlo(M, dM, R, dR, L, dL, Z_X, dZ_X, Y, dY, r_n, d_c, tau, tau_t, N, L_sol,a,b):
+    nn = np.zeros(N)
+    Mm = M + dM*np.random.normal(0, 1, N)
+    Rr = R + dR*np.random.normal(0, 1, N)
+    Ll = L + dL*np.random.normal(0, 1, N)
+    Z_Xx = Z_X + dZ_X*np.random.normal(0, 1, N)
+    Yy = Y + dY*np.random.normal(0, 1, N)
+    for i in range(N):
+        print(f"Iteration {i + 1}/{N}")
+        try:
+            # Attempt to calculate the polytropic index with the current parameters
+            nn[i] = index(y, a, b, Mm[i], Ll[i], Yy[i], Z_Xx[i], Rr[i], r_n, d_c, tau, tau_t, L_sol)
+        except ValueError as e:
+            # If there's a ValueError, skip this iteration and print a message
+            print(f"Warning: Skipping iteration {i + 1} due to error: {e}")
+            #nn[i] = np.nan  # Optionally, set this entry to NaN or some other marker
+    return nn
 
 
 # Lane-Emden visualizations

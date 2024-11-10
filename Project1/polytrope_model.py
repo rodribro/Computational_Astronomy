@@ -97,6 +97,15 @@ def temperature(M, R, X, Z, n): # R_g = gas constant, G  (define both as global 
 
     GENERATING OVERFLOW PROBLEMS FOR LUMINOSITY
 '''
+
+def rho_P_T_central(n, R, M, X, Z):
+    x, y1, y2 = lane_emden_solver(n)
+    mu = 4/(5*X-Z+3)
+    rho_c = -(M*x[-1])/(4*np.pi*y2[-1]*R**3)
+    T_c = -(mu*G*M)/(R_g*R*(n+1)*x[-1]*y2[-1])
+    P_c = (G*M**2)/(R**4 * 4*np.pi*(n+1)*y2[-1]**2)
+    return rho_c, P_c, T_c
+
 def rho_P_T(n, R, M, X, Z):
     x, y1, y2 = lane_emden_solver(n)
     mu = 4/(5*X-Z+3)
@@ -163,7 +172,7 @@ def luminosity(n, X_s, r_c, d_c, R, time, total_time, M, Z, L_sol ):
     integrand = xi**2 * y1**n * M * ems_tot/L_sol
 
     # Cumulative integral
-    integral = cumulative_trapezoid(integrand, x=xi, initial=0) # or cumulative_simpson
+    integral = cumulative_simpson(integrand, x=xi, initial=0)
     return const * integral
 
 
@@ -227,4 +236,29 @@ def lane_emden_plots():
         plt.title(r'$\xi_S$ for different values of n')
         plt.legend()
         plt.grid(True)
+    plt.show()
+
+# Monte Carlo visualization
+def monte_carlo_plots(mean, std, N, nn): 
+    # Gaussian
+    # Generate x values for the curve
+    x_gauss = np.linspace(mean - 5*std, mean + 5*std, N)
+    # Calculate the PDF of the normal distribution
+    y_gauss = norm.pdf(x_gauss, mean, std)
+
+    # Plots
+    # Mean vertical line
+    plt.axvline(x=mean, color='red', linewidth=2, label='Mean')
+
+    # Gaussian
+    plt.plot(x_gauss, y_gauss, color='orange', linewidth=2, label='Gaussian')
+
+    # Histogram
+    plt.hist(nn, 40, color='blue', edgecolor='black', density=True)
+
+    plt.xlabel('n')
+    plt.ylabel('N(n)')
+    plt.title('Monte Carlo Simulation Results for Index')
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.legend()
     plt.show()

@@ -8,6 +8,8 @@ Code for classes and 3 projects.
 
 * Stars used: Epsilon Eridani and Theta Persei A
 
+* Tools: Python (NumPy, SciPy and MatPlotLib)
+
 <p> </p>
 <div style="display: flex; justify-content: space-between;">
   <img src="Project1/plots_project1/lane_em_index.png" alt="Lane-Emden solutions" width="18%">
@@ -24,6 +26,7 @@ Code for classes and 3 projects.
 
 * Spectra used: 2 provided observed spectrums of 2 stars and hundreds of generated spectra based on [Pollux's database](https://pollux.oreme.org/).
 
+* Tools: Python (NumPy, SciPy, Pandas and MatPlotLib)
 
 
 

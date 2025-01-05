@@ -26,7 +26,8 @@ Code for classes and 3 projects.
 
 ### <b> Project 2: Stellar Paremeters </b> 
 
-* <b> Goal: </b>  Predict stellar parameters based on an observed spectrum trough the comparison of multiple simulated spectra to find the best possible fit.
+* <b> Goal: </b>  Predict stellar parameters based on an observed spectrum th?
+rough the comparison of multiple simulated spectra to find the best possible fit.
 
 * <b> Spectra used: </b> 2 provided observed spectrums of 2 stars and hundreds of generated spectra based on [Pollux's database](https://pollux.oreme.org/).
 
